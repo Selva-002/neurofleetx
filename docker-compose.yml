@@ -1,0 +1,76 @@
+version: "3.9"
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: neurofleetx-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: neurofleetx
+      
+    ports:
+      - "3307:3306"   # ✅ Changed host port to 3307
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - neurofleetx-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin:latest
+    container_name: neurofleetx-phpmyadmin
+    environment:
+      PMA_HOST: mysql
+      PMA_USER: root
+      PMA_PASSWORD: root
+    ports:
+      - "8081:80"   # Access phpMyAdmin at http://localhost:8081
+    depends_on:
+      - mysql
+    networks:
+      - neurofleetx-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: neurofleetx-backend
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/neurofleetx?useSSL=false&serverTimezone=UTC&createDatabaseIfNotExist=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+      JWT_SECRET: neurofleetx-secret-key-2024
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - neurofleetx-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: neurofleetx-frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - neurofleetx-network
+
+volumes:
+  mysql_data:
+
+networks:
+  neurofleetx-network:
+    driver: bridge
